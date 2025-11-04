@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emoji Reactions Analysis</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .stats {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .filter-section {
+            padding: 20px 30px;
+            background: #f8f9fa;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .filter-input {
+            width: 100%;
+            padding: 10px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .filter-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .table-wrapper {
+            padding: 30px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        th:hover {
+            background: linear-gradient(135deg, #5568d3 0%, #653a8b 100%);
+        }
+
+        th.sortable::after {
+            content: ' ⇅';
+            opacity: 0.5;
+            font-size: 0.8em;
+        }
+
+        th.sort-asc::after {
+            content: ' ▲';
+            opacity: 1;
+        }
+
+        th.sort-desc::after {
+            content: ' ▼';
+            opacity: 1;
+        }
+
+        td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        tr:nth-child(even):hover {
+            background-color: #f0f0f0;
+        }
+
+        .emoji-cell {
+            text-align: center;
+            font-size: 1.2em;
+        }
+
+        .rate-cell {
+            color: #666;
+            font-style: italic;
+        }
+
+        .empty-cell {
+            color: #ccc;
+            text-align: center;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+            font-size: 18px;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 8px;
+            border: 1px solid #fcc;
+        }
+
+        .error-title {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+
+        .error-details {
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .header h1 {
+                font-size: 1.5em;
+            }
+
+            .stats {
+                flex-direction: column;
+            }
+
+            table {
+                font-size: 12px;
+            }
+
+            th, td {
+                padding: 8px 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>:bar_chart: Emoji Reactions Analysis</h1>
+            <p>Interactive sortable table with reaction statistics</p>
+        </div>
+
+        <div id="stats" class="stats" style="display: none;"></div>
+        
+        <div class="filter-section" id="filterSection" style="display: none;">
+            <input type="text" id="filterInput" class="filter-input" placeholder=":mag: Filter by user name...">
+        </div>
+
+        <div class="table-wrapper">
+            <div id="content">
+                <div class="loading">Loading emoji_analysis.csv...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let tableData = [];
+        let currentSort = { column: null, direction: 'asc' };
+        let headers = [];
+
+        // Load CSV automatically on page load
+        window.addEventListener('load', function() {
+            loadCSV();
+        });
+
+        document.getElementById('filterInput').addEventListener('input', function(e) {
+            filterTable(e.target.value);
+        });
+
+        function loadCSV() {
+            fetch('emoji_analysis.csv')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    return response.text();
+                })
+                .then(text => {
+                    parseCSV(text);
+                })
+                .catch(error => {
+                    showError('Could not load emoji_analysis.csv', error.message);
+                });
+        }
+
+        function parseCSV(text) {
+            const lines = text.split('\n').filter(line => line.trim());
+            
+            if (lines.length < 2) {
+                showError('CSV file is empty or invalid', 'The file must contain at least a header row and one data row.');
+                return;
+            }
+
+            // Parse headers
+            headers = parseCSVLine(lines[0]);
+            
+            // Parse data
+            tableData = [];
+            for (let i = 1; i < lines.length; i++) {
+                const values = parseCSVLine(lines[i]);
+                if (values.length === headers.length) {
+                    const row = {};
+                    headers.forEach((header, index) => {
+                        row[header] = values[index];
+                    });
+                    tableData.push(row);
+                }
+            }
+
+            if (tableData.length === 0) {
+                showError('No data found in CSV', 'The CSV file contains headers but no data rows.');
+                return;
+            }
+
+            displayStats();
+            displayTable();
+            document.getElementById('filterSection').style.display = 'block';
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            
+            return result;
+        }
+
+        function displayStats() {
+            const totalUsers = tableData.length;
+            const totalMessages = tableData.reduce((sum, row) => sum + parseFloat(row.message_count || 0), 0);
+            const totalReactions = tableData.reduce((sum, row) => sum + parseFloat(row.reactions_count || 0), 0);
+            const avgRate = totalMessages > 0 ? (totalReactions / totalMessages).toFixed(2) : 0;
+
+            const statsHTML = `
+                <div class="stat-item">
+                    <div class="stat-value">${totalUsers}</div>
+                    <div class="stat-label">Total Users</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${totalMessages}</div>
+                    <div class="stat-label">Total Messages</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${totalReactions}</div>
+                    <div class="stat-label">Total Reactions</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">${avgRate}</div>
+                    <div class="stat-label">Avg Reaction Rate</div>
+                </div>
+            `;
+
+            document.getElementById('stats').innerHTML = statsHTML;
+            document.getElementById('stats').style.display = 'flex';
+        }
+
+        function displayTable(filteredData = tableData) {
+            if (filteredData.length === 0) {
+                document.getElementById('content').innerHTML = '<div class="loading">No matching results</div>';
+                return;
+            }
+
+            let html = '<table><thead><tr>';
+            
+            // Create header row
+            headers.forEach((header, index) => {
+                const sortClass = currentSort.column === index ? `sort-${currentSort.direction}` : '';
+                html += `<th class="sortable ${sortClass}" onclick="sortTable(${index})">${escapeHtml(header)}</th>`;
+            });
+            
+            html += '</tr></thead><tbody>';
+            
+            // Create data rows
+            filteredData.forEach(row => {
+                html += '<tr>';
+                headers.forEach(header => {
+                    const value = row[header] || '';
+                    const isEmoji = /[\u{1F300}-\u{1F9FF}]/u.test(header);
+                    const isRate = header.endsWith('_rate');
+                    
+                    let cellClass = '';
+                    let displayValue = value;
+                    
+                    if (value === '' || value === null || value === undefined) {
+                        cellClass = 'empty-cell';
+                        displayValue = '-';
+                    } else if (isEmoji) {
+                        cellClass = 'emoji-cell';
+                    } else if (isRate) {
+                        cellClass = 'rate-cell';
+                        if (value !== '-' && value !== '') {
+                            displayValue = parseFloat(value).toFixed(4);
+                        }
+                    }
+                    
+                    html += `<td class="${cellClass}">${escapeHtml(displayValue)}</td>`;
+                });
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            document.getElementById('content').innerHTML = html;
+        }
+
+        function sortTable(columnIndex) {
+            const column = headers[columnIndex];
+            
+            // Toggle sort direction
+            if (currentSort.column === columnIndex) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = columnIndex;
+                currentSort.direction = 'asc';
+            }
+            
+            // Sort data
+            tableData.sort((a, b) => {
+                let aVal = a[column] || '';
+                let bVal = b[column] || '';
+                
+                // Try to parse as number
+                const aNum = parseFloat(aVal);
+                const bNum = parseFloat(bVal);
+                
+                if (!isNaN(aNum) && !isNaN(bNum)) {
+                    return currentSort.direction === 'asc' ? aNum - bNum : bNum - aNum;
+                }
+                
+                // String comparison
+                aVal = String(aVal).toLowerCase();
+                bVal = String(bVal).toLowerCase();
+                
+                if (currentSort.direction === 'asc') {
+                    return aVal.localeCompare(bVal);
+                } else {
+                    return bVal.localeCompare(aVal);
+                }
+            });
+            
+            // Re-display with current filter
+            const filterValue = document.getElementById('filterInput').value;
+            filterTable(filterValue);
+        }
+
+        function filterTable(searchTerm) {
+            searchTerm = searchTerm.toLowerCase().trim();
+            
+            if (!searchTerm) {
+                displayTable();
+                return;
+            }
+            
+            const filtered = tableData.filter(row => {
+                const userName = (row.user_name || '').toLowerCase();
+                return userName.includes(searchTerm);
+            });
+            
+            displayTable(filtered);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showError(title, details) {
+            const errorHTML = `
+                <div class="error">
+                    <div class="error-title">:x: ${escapeHtml(title)}</div>
+                    <div class="error-details">
+                        <p>${escapeHtml(details)}</p>
+                        <p style="margin-top: 15px;"><strong>Make sure:</strong></p>
+                        <ul style="margin-left: 20px; margin-top: 5px;">
+                            <li>The file <code>emoji_analysis.csv</code> is in the same folder as this HTML file</li>
+                            <li>You are running this through a web server (not opening as file://)</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+            document.getElementById('content').innerHTML = errorHTML;
+        }
+    </script>
+</body>
+</html>
