@@ -174,7 +174,7 @@
         }
 
         .table-scroll {
-            overflow-x: auto;
+            overflow-x: scroll;
         }
 
         table {
@@ -268,14 +268,59 @@
             font-size: 1rem;
         }
 
+        /* Emoji column stripe backgrounds */
+        .emoji-stripe-even { background: rgba(255,255,255, 0.015); }
+        .emoji-stripe-odd  { background: rgba(255,255,255, 0.04); }
+        tbody tr:hover .emoji-stripe-even { background: rgba(255,255,255, 0.04); }
+        tbody tr:hover .emoji-stripe-odd  { background: rgba(255,255,255, 0.065); }
+        th.emoji-stripe-even { background: #161616; }
+        th.emoji-stripe-odd  { background: #1c1c1c; }
+
         .zero {
             color: #333;
         }
 
-        .heat-1 { color: #666; }
-        .heat-2 { color: #f59e0b; }
-        .heat-3 { color: #f97316; }
-        .heat-4 { color: #ef4444; font-weight: 600; }
+        .heat-1 { color: #555; }
+        .heat-2 { color: #888; }
+        .heat-3 { color: #a3a3a3; }
+        .heat-4 { color: #eab308; }
+        .heat-5 { color: #f59e0b; font-weight: 500; }
+        .heat-6 { color: #f97316; font-weight: 600; }
+        .heat-7 { color: #ef4444; font-weight: 700; }
+
+        /* Dark scrollbar */
+        .table-scroll,
+        .top-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: #333 #141414;
+        }
+        .table-scroll::-webkit-scrollbar,
+        .top-scrollbar::-webkit-scrollbar {
+            height: 10px;
+        }
+        .table-scroll::-webkit-scrollbar-track,
+        .top-scrollbar::-webkit-scrollbar-track {
+            background: #141414;
+        }
+        .table-scroll::-webkit-scrollbar-thumb,
+        .top-scrollbar::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 5px;
+        }
+        .table-scroll::-webkit-scrollbar-thumb:hover,
+        .top-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #444;
+        }
+
+        /* Top scrollbar */
+        .top-scrollbar {
+            overflow-x: scroll;
+            overflow-y: hidden;
+        }
+
+        .top-scrollbar-inner {
+            height: 1px;
+        }
 
         /* Loading / Error */
         .status-message {
@@ -320,7 +365,7 @@
 
             .search-box { max-width: none; }
 
-            .period-badge { display: none; }
+            .period-badge { margin-left: 0; }
 
             table { font-size: 0.75rem; }
 
@@ -362,7 +407,10 @@
         </div>
 
         <div class="table-container">
-            <div class="table-scroll">
+            <div class="top-scrollbar" id="topScrollbar">
+                <div class="top-scrollbar-inner" id="topScrollbarInner"></div>
+            </div>
+            <div class="table-scroll" id="tableScroll">
                 <div id="content">
                     <div class="status-message">
                         <div class="spinner"></div>
@@ -473,9 +521,9 @@
 
             document.getElementById('stats').innerHTML = [
                 { label: 'Users', value: total },
-                { label: 'Messages', value: msgs.toLocaleString() },
+                { label: 'Memes', value: msgs.toLocaleString() },
                 { label: 'Reactions', value: reacts.toLocaleString() },
-                { label: 'Avg Rate', value: avg }
+                { label: 'Reactions/Memes Avg Rate', value: avg }
             ].map(s => `
                 <div class="stat-card">
                     <div class="stat-label">${s.label}</div>
@@ -484,26 +532,24 @@
             `).join('');
         }
 
+        const DATA_COLUMNS = new Set(['user_name', 'message_count', 'memes_count', 'reactions_count', 'reaction_rate_all']);
+
+        // Rename message_count to memes_count in display
+        const HEADER_RENAME = { 'message_count': 'memes_count' };
+
         function getEmojiColumns() {
-            return headers.filter(h => /[\u{1F300}-\u{1FAFF}]/u.test(h));
+            return headers.filter(h => !DATA_COLUMNS.has(h));
         }
 
-        function getMaxForColumn(col) {
-            let max = 0;
-            tableData.forEach(r => {
-                const v = parseFloat(r[col] || 0);
-                if (v > max) max = v;
-            });
-            return max;
-        }
-
-        function heatClass(value, max) {
+        function heatClass(value) {
             if (value === 0) return 'zero';
-            const ratio = value / max;
-            if (ratio >= 0.7) return 'heat-4';
-            if (ratio >= 0.4) return 'heat-3';
-            if (ratio >= 0.15) return 'heat-2';
-            return 'heat-1';
+            if (value === 1) return 'heat-1';
+            if (value <= 3) return 'heat-2';
+            if (value <= 7) return 'heat-3';
+            if (value <= 15) return 'heat-4';
+            if (value <= 30) return 'heat-5';
+            if (value <= 80) return 'heat-6';
+            return 'heat-7';
         }
 
         function displayTable(filteredData) {
@@ -514,8 +560,15 @@
             }
 
             const emojiCols = new Set(getEmojiColumns());
-            const colMaxes = {};
-            emojiCols.forEach(col => { colMaxes[col] = getMaxForColumn(col); });
+
+            // Build emoji stripe index (0-based counter for emoji cols only)
+            let emojiIdx = 0;
+            const emojiStripeMap = {};
+            headers.forEach(h => {
+                if (emojiCols.has(h)) {
+                    emojiStripeMap[h] = emojiIdx++;
+                }
+            });
 
             let html = '<table><thead><tr>';
             html += '<th class="col-rank">#</th>';
@@ -525,8 +578,9 @@
                 const arrow = currentSort.column === i
                     ? (currentSort.direction === 'asc' ? '&#9650;' : '&#9660;')
                     : '&#8597;';
-                const isEmoji = emojiCols.has(h);
-                html += `<th class="${sortClass}" onclick="sortTable(${i})">${esc(h)}<span class="sort-icon">${arrow}</span></th>`;
+                const stripe = emojiCols.has(h) ? (emojiStripeMap[h] % 2 === 0 ? 'emoji-stripe-even' : 'emoji-stripe-odd') : '';
+                const displayName = HEADER_RENAME[h] || h;
+                html += `<th class="${sortClass} ${stripe}" onclick="sortTable(${i})">${esc(displayName)}<span class="sort-icon">${arrow}</span></th>`;
             });
 
             html += '</tr></thead><tbody>';
@@ -540,6 +594,7 @@
                     const isEmoji = emojiCols.has(h);
                     const isRate = h.includes('rate');
                     const isName = h === 'user_name';
+                    const stripe = isEmoji ? (emojiStripeMap[h] % 2 === 0 ? 'emoji-stripe-even' : 'emoji-stripe-odd') : '';
 
                     if (isName) {
                         html += `<td class="col-name">${esc(val)}</td>`;
@@ -547,8 +602,8 @@
                         html += `<td class="col-rate">${val ? parseFloat(val).toFixed(2) : '-'}</td>`;
                     } else if (isEmoji) {
                         const num = parseInt(val) || 0;
-                        const cls = heatClass(num, colMaxes[h]);
-                        html += `<td class="col-emoji ${cls}">${num === 0 ? '·' : num}</td>`;
+                        const cls = heatClass(num);
+                        html += `<td class="col-emoji ${cls} ${stripe}">${num === 0 ? '·' : num}</td>`;
                     } else {
                         const num = parseFloat(val);
                         if (!isNaN(num)) {
@@ -564,6 +619,7 @@
 
             html += '</tbody></table>';
             document.getElementById('content').innerHTML = html;
+            syncTopScrollbar();
         }
 
         function sortData(colIdx, dir) {
@@ -615,6 +671,37 @@
                     <span style="font-size:0.875rem">${esc(details)}</span>
                 </div>`;
         }
+
+        // Sync top scrollbar width with table content
+        function syncTopScrollbar() {
+            setTimeout(() => {
+                var ts = document.getElementById('tableScroll');
+                var inn = document.getElementById('topScrollbarInner');
+                if (ts && inn) {
+                    inn.style.width = ts.scrollWidth + 'px';
+                }
+            }, 50);
+        }
+
+        (function() {
+            const tableScroll = document.getElementById('tableScroll');
+            const topBar = document.getElementById('topScrollbar');
+            let syncing = false;
+
+            topBar.addEventListener('scroll', () => {
+                if (syncing) return;
+                syncing = true;
+                tableScroll.scrollLeft = topBar.scrollLeft;
+                syncing = false;
+            });
+
+            tableScroll.addEventListener('scroll', () => {
+                if (syncing) return;
+                syncing = true;
+                topBar.scrollLeft = tableScroll.scrollLeft;
+                syncing = false;
+            });
+        })();
     </script>
 </body>
 </html>
