@@ -488,17 +488,15 @@
         let currentFile = 'emoji_analysis_all.csv';
         let currentLabel = 'All Time';
 
-        // Available period files — update these when new CSV files are added
-        const MONTH_FILES = [
-            { file: 'emoji_analysis_month_2026-02.csv', label: 'February 2026' },
-        ];
-        const WEEK_FILES = [
-            { file: 'emoji_analysis_week_2026-02-23.csv', label: 'Week of Feb 23' },
-        ];
+        // Dynamic file discovery settings
+        const DISCOVERY_START = '2025-01'; // earliest year-month to probe
+
+        const MONTH_NAMES = ['January','February','March','April','May','June',
+                             'July','August','September','October','November','December'];
 
         // Init
-        document.addEventListener('DOMContentLoaded', () => {
-            buildDropdowns();
+        document.addEventListener('DOMContentLoaded', async () => {
+            await discoverFiles();
             loadCSV(currentFile);
             setupSwitcher();
             document.getElementById('filterInput').addEventListener('input', e => {
@@ -506,9 +504,57 @@
             });
         });
 
-        function buildDropdowns() {
+        // Probe the server for existing CSV files and populate dropdowns
+        async function discoverFiles() {
             const monthMenu = document.getElementById('monthMenu');
-            MONTH_FILES.forEach(m => {
+            const weekMenu = document.getElementById('weekMenu');
+
+            const now = new Date();
+            const startYear = parseInt(DISCOVERY_START.split('-')[0]);
+            const startMonth = parseInt(DISCOVERY_START.split('-')[1]);
+
+            // --- Discover month files ---
+            const monthCandidates = [];
+            for (let y = startYear; y <= now.getFullYear(); y++) {
+                const mStart = (y === startYear) ? startMonth : 1;
+                const mEnd = (y === now.getFullYear()) ? now.getMonth() + 1 : 12;
+                for (let m = mStart; m <= mEnd; m++) {
+                    const key = `${y}-${String(m).padStart(2, '0')}`;
+                    const file = `emoji_analysis_month_${key}.csv`;
+                    const label = `${MONTH_NAMES[m - 1]} ${y}`;
+                    monthCandidates.push({ file, label });
+                }
+            }
+
+            // --- Discover week files (probe every Monday from start to now) ---
+            const weekCandidates = [];
+            const d = new Date(startYear, startMonth - 1, 1);
+            // Move to first Monday
+            while (d.getDay() !== 1) d.setDate(d.getDate() + 1);
+            while (d <= now) {
+                const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                const file = `emoji_analysis_week_${key}.csv`;
+                const mName = MONTH_NAMES[d.getMonth()].slice(0, 3);
+                const label = `Week of ${mName} ${d.getDate()}`;
+                weekCandidates.push({ file, label });
+                d.setDate(d.getDate() + 7);
+            }
+
+            // Probe all candidates in parallel using HEAD requests
+            async function probeExists(filename) {
+                try {
+                    const r = await fetch(filename, { method: 'HEAD' });
+                    return r.ok;
+                } catch { return false; }
+            }
+
+            const [monthResults, weekResults] = await Promise.all([
+                Promise.all(monthCandidates.map(async c => ({ ...c, exists: await probeExists(c.file) }))),
+                Promise.all(weekCandidates.map(async c => ({ ...c, exists: await probeExists(c.file) }))),
+            ]);
+
+            // Populate month dropdown (newest first)
+            monthResults.filter(c => c.exists).reverse().forEach(m => {
                 const btn = document.createElement('button');
                 btn.textContent = m.label;
                 btn.dataset.file = m.file;
@@ -516,14 +562,18 @@
                 monthMenu.appendChild(btn);
             });
 
-            const weekMenu = document.getElementById('weekMenu');
-            WEEK_FILES.forEach(w => {
+            // Populate week dropdown (newest first)
+            weekResults.filter(c => c.exists).reverse().forEach(w => {
                 const btn = document.createElement('button');
                 btn.textContent = w.label;
                 btn.dataset.file = w.file;
                 btn.dataset.label = w.label;
                 weekMenu.appendChild(btn);
             });
+
+            // Hide dropdowns that have no items
+            if (!monthMenu.children.length) document.getElementById('monthDropdown').style.display = 'none';
+            if (!weekMenu.children.length) document.getElementById('weekDropdown').style.display = 'none';
         }
 
         function setupSwitcher() {
