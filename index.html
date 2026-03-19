@@ -398,43 +398,6 @@
             to { transform: rotate(360deg); }
         }
 
-        /* Bird */
-        .bird-track {
-            position: fixed;
-            bottom: 100px;
-            left: 0;
-            width: 100%;
-            pointer-events: none;
-            z-index: 9999;
-            overflow: hidden;
-        }
-
-        .bird {
-            display: inline-block;
-            white-space: pre;
-            font-family: monospace;
-            font-size: 10px;
-            line-height: 1.1;
-            color: #3b82f6;
-            text-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
-            animation: birdFly 6s linear infinite;
-            position: relative;
-        }
-
-        @keyframes birdFly {
-            0%   { left: -120px; transform: scaleX(1) translateY(0); }
-            12%  { transform: scaleX(1) translateY(-18px); }
-            25%  { transform: scaleX(1) translateY(0); }
-            37%  { transform: scaleX(1) translateY(-18px); }
-            49%  { left: calc(100vw - 20px); transform: scaleX(1) translateY(0); }
-            50%  { left: calc(100vw - 20px); transform: scaleX(-1) translateY(0); }
-            62%  { transform: scaleX(-1) translateY(-18px); }
-            75%  { transform: scaleX(-1) translateY(0); }
-            87%  { transform: scaleX(-1) translateY(-18px); }
-            99%  { left: -120px; transform: scaleX(-1) translateY(0); }
-            100% { left: -120px; transform: scaleX(1) translateY(0); }
-        }
-
         /* Elephant */
         .elephant-track {
             position: fixed;
@@ -547,14 +510,6 @@
                 </div>
             </div>
         </div>
-    </div>
-
-    <div class="bird-track">
-        <div class="bird">     ___
- ___/   >
-(  o  ) )__
- \ = /    /
-  `---'--'</div>
     </div>
 
     <div class="elephant-track">
