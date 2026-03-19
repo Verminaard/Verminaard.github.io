@@ -422,6 +422,37 @@
             th, td { padding: 8px 6px; }
         }
 
+        /* Bouncing Elephant */
+        .elephant-container {
+            position: fixed;
+            bottom: 20px;
+            left: 0;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .elephant {
+            color: #22c55e;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.1;
+            white-space: pre;
+            animation: bounceElephant 8s linear infinite, hopElephant 0.5s ease-in-out infinite;
+        }
+
+        @keyframes bounceElephant {
+            0% { margin-left: 0; }
+            49.9% { transform: scaleX(1); }
+            50% { margin-left: calc(100vw - 220px); transform: scaleX(-1); }
+            99.9% { transform: scaleX(-1); }
+            100% { margin-left: 0; transform: scaleX(1); }
+        }
+
+        @keyframes hopElephant {
+            0%, 100% { margin-bottom: 0; }
+            50% { margin-bottom: 15px; }
+        }
+
         @media (max-width: 480px) {
             .stats {
                 grid-template-columns: 1fr 1fr;
@@ -440,6 +471,18 @@
     </style>
 </head>
 <body>
+    <div class="elephant-container">
+        <div class="elephant">        ____
+       /    \
+      | ^  ^ |
+      |  ||  |
+       \____/
+      /||  ||\
+     / ||  || \
+    /  ||  ||  \
+       ==  ==</div>
+    </div>
+
     <div class="container">
         <div class="header">
             <h1>Emoji Reactions Analysis</h1>
